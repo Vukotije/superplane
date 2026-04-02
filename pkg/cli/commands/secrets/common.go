@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -24,8 +25,37 @@ type secretResource struct {
 	Spec       *openapi_client.SecretsSecretSpec     `json:"spec,omitempty"`
 }
 
+// providerAliases maps user-friendly provider names to the API enum values.
+var providerAliases = map[string]string{
+	"local": string(openapi_client.SECRETPROVIDER_PROVIDER_LOCAL),
+}
+
 func organizationDomainType() openapi_client.AuthorizationDomainType {
 	return openapi_client.AUTHORIZATIONDOMAINTYPE_DOMAIN_TYPE_ORGANIZATION
+}
+
+// normalizeSecretYAML converts YAML to JSON and normalizes provider aliases.
+func normalizeSecretYAML(data []byte) ([]byte, error) {
+	jsonData, err := yaml.YAMLToJSON(data)
+	if err != nil {
+		return nil, err
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(jsonData, &raw); err != nil {
+		return nil, err
+	}
+
+	spec, ok := raw["spec"].(map[string]interface{})
+	if ok {
+		if provider, ok := spec["provider"].(string); ok {
+			if mapped, exists := providerAliases[provider]; exists {
+				spec["provider"] = mapped
+			}
+		}
+	}
+
+	return json.Marshal(raw)
 }
 
 func parseSecretFile(path string) (*secretResource, error) {
@@ -48,9 +78,30 @@ func parseSecretFile(path string) (*secretResource, error) {
 		return nil, fmt.Errorf("unsupported resource kind %q", kind)
 	}
 
-	resource := secretResource{}
-	if err := yaml.Unmarshal(data, &resource); err != nil {
+	normalized, err := normalizeSecretYAML(data)
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse secret resource: %w", err)
+	}
+
+	resource := secretResource{}
+	if err := json.Unmarshal(normalized, &resource); err != nil {
+		return nil, fmt.Errorf("failed to parse secret resource: %w", err)
+	}
+
+	if resource.Metadata == nil || resource.Metadata.GetName() == "" {
+		return nil, fmt.Errorf("metadata.name is required")
+	}
+
+	if resource.Spec == nil {
+		return nil, fmt.Errorf("spec is required")
+	}
+
+	if !resource.Spec.HasProvider() || resource.Spec.GetProvider() == "" {
+		return nil, fmt.Errorf("spec.provider is required (accepted values: local)")
+	}
+
+	if local, ok := resource.Spec.GetLocalOk(); !ok || local == nil || !local.HasData() || len(local.GetData()) == 0 {
+		return nil, fmt.Errorf("spec.local.data is required and must contain at least one key-value pair")
 	}
 
 	return &resource, nil
