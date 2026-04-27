@@ -86,29 +86,34 @@ function buildElapsedLabel(
   context: ExecutionDetailsContext,
   metadata: CreateRepositorySandboxMetadata | undefined,
 ): string | undefined {
+  // The bootstrap timeout is bootstrap-specific (anchored at
+  // bootstrap.startedAt on the backend), so the "elapsed / timeout"
+  // indicator only makes sense once the bootstrap phase has begun.
+  // Before that, fall back to a plain elapsed-since-sandbox-creation
+  // counter without a deadline comparison.
+  const bootstrapStartedAt = metadata?.bootstrap?.startedAt;
+  if (bootstrapStartedAt && metadata?.timeout) {
+    const startedAtMs = Date.parse(bootstrapStartedAt);
+    if (!Number.isNaN(startedAtMs)) {
+      const endAtMs = resolveBootstrapEndTimestamp(context, metadata) ?? Date.now();
+      const elapsedMs = Math.max(0, endAtMs - startedAtMs);
+      const timeoutMs = metadata.timeout * 1000;
+      return `${formatDuration(elapsedMs)} / ${formatDuration(timeoutMs)}`;
+    }
+  }
+
   if (!metadata?.sandboxStartedAt) {
     return undefined;
   }
-
-  const timeoutMs = metadata.timeout ? metadata.timeout * 1000 : undefined;
   const startedAtMs = Date.parse(metadata.sandboxStartedAt);
   if (Number.isNaN(startedAtMs)) {
     return undefined;
   }
-
-  // For finished runs, show elapsed frozen at execution end when available;
-  // for in-flight runs, elapsed ticks forward naturally on each sidebar refresh
-  // (the sidebar already polls every 1.5s).
-  const endAtMs = resolveEndTimestamp(context, metadata) ?? Date.now();
-  const elapsedMs = Math.max(0, endAtMs - startedAtMs);
-
-  if (timeoutMs) {
-    return `${formatDuration(elapsedMs)} / ${formatDuration(timeoutMs)}`;
-  }
-  return formatDuration(elapsedMs);
+  const endAtMs = resolveExecutionEndTimestamp(context) ?? Date.now();
+  return formatDuration(Math.max(0, endAtMs - startedAtMs));
 }
 
-function resolveEndTimestamp(
+function resolveBootstrapEndTimestamp(
   context: ExecutionDetailsContext,
   metadata: CreateRepositorySandboxMetadata | undefined,
 ): number | undefined {
@@ -118,18 +123,20 @@ function resolveEndTimestamp(
       return ms;
     }
   }
+  return resolveExecutionEndTimestamp(context);
+}
 
+function resolveExecutionEndTimestamp(context: ExecutionDetailsContext): number | undefined {
   // For non-bootstrap stage finishes (e.g. preparingSandbox timeout),
-  // freeze the elapsed counter at the execution's last update once it
-  // has reached the finished state. Without this, the timer keeps
-  // ticking forward on every sidebar refetch.
+  // freeze the counter at the execution's last update once it has
+  // reached the finished state. Without this, the timer keeps ticking
+  // forward on every sidebar refetch.
   if (context.execution.state === "STATE_FINISHED") {
     const ms = Date.parse(context.execution.updatedAt);
     if (!Number.isNaN(ms)) {
       return ms;
     }
   }
-
   return undefined;
 }
 

@@ -32,7 +32,7 @@ function buildExecution(metadata: Record<string, unknown>): ExecutionInfo {
 }
 
 describe("createRepositorySandboxMapper.getExecutionDetails", () => {
-  it("exposes core sandbox metadata for in-flight runs", () => {
+  it("exposes core sandbox metadata and elapsed/timeout once bootstrap has started", () => {
     const node = buildNode();
     const ctx: ExecutionDetailsContext = {
       nodes: [node],
@@ -44,6 +44,7 @@ describe("createRepositorySandboxMapper.getExecutionDetails", () => {
         directory: "/home/daytona/superplane",
         sandboxStartedAt: new Date().toISOString(),
         timeout: 300,
+        bootstrap: { startedAt: new Date().toISOString() },
       }),
     };
 
@@ -55,6 +56,26 @@ describe("createRepositorySandboxMapper.getExecutionDetails", () => {
       Directory: "/home/daytona/superplane",
     });
     expect(details.Elapsed).toMatch(/\//); // "<elapsed> / <timeout>"
+  });
+
+  it("shows plain elapsed (no timeout) before bootstrap has started", () => {
+    // Pre-bootstrap stages must not display the bootstrap timeout against
+    // sandbox creation time — that comparison is misleading because the
+    // bootstrap deadline is anchored at bootstrap.startedAt on the backend.
+    const node = buildNode();
+    const ctx: ExecutionDetailsContext = {
+      nodes: [node],
+      node,
+      execution: buildExecution({
+        stage: "preparingSandbox",
+        sandboxStartedAt: new Date(Date.now() - 5000).toISOString(),
+        timeout: 300,
+      }),
+    };
+
+    const details = createRepositorySandboxMapper.getExecutionDetails(ctx);
+    expect(details.Elapsed).toBeDefined();
+    expect(details.Elapsed).not.toMatch(/\//);
   });
 
   it("surfaces bootstrap log when the backend has captured output", () => {
@@ -76,27 +97,30 @@ describe("createRepositorySandboxMapper.getExecutionDetails", () => {
     expect(details["Bootstrap log"]).toBe("installing deps...\nrunning tests...");
   });
 
-  it("freezes elapsed at bootstrap.finishedAt when the phase ended", () => {
+  it("freezes bootstrap elapsed between bootstrap.startedAt and bootstrap.finishedAt", () => {
     const node = buildNode();
-    const started = new Date("2026-04-23T10:00:00Z").toISOString();
-    const finished = new Date("2026-04-23T10:04:30Z").toISOString();
+    const sandboxStarted = new Date("2026-04-23T09:55:00Z").toISOString();
+    const bootstrapStarted = new Date("2026-04-23T10:00:00Z").toISOString();
+    const bootstrapFinished = new Date("2026-04-23T10:04:30Z").toISOString();
 
     const ctx: ExecutionDetailsContext = {
       nodes: [node],
       node,
       execution: buildExecution({
         stage: "bootstrapping",
-        sandboxStartedAt: started,
+        sandboxStartedAt: sandboxStarted,
         timeout: 300,
-        bootstrap: { finishedAt: finished },
+        bootstrap: { startedAt: bootstrapStarted, finishedAt: bootstrapFinished },
       }),
     };
 
     const details = createRepositorySandboxMapper.getExecutionDetails(ctx);
-    // Elapsed is deterministic when bootstrap.finishedAt is present,
-    // so the label should not depend on "now".
+    // Elapsed must measure from bootstrap.startedAt, NOT sandboxStartedAt;
+    // otherwise the 5-minute pre-bootstrap gap would inflate the figure to
+    // ~9m30s and exceed the 5m timeout prematurely.
     expect(details.Elapsed).toContain("4m");
     expect(details.Elapsed).toContain("30s");
+    expect(details.Elapsed).not.toContain("9m");
   });
 
   it("freezes elapsed at execution.updatedAt for non-bootstrap finishes", () => {
