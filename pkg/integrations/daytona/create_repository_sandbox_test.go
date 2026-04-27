@@ -310,7 +310,7 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 		}
 
 		requestCtx := &contexts.RequestContext{}
-		err := component.HandleAction(core.ActionContext{
+		err := component.HandleHook(core.ActionHookContext{
 			Name:           "poll",
 			HTTP:           httpContext,
 			Metadata:       metadataCtx,
@@ -370,7 +370,7 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 		}
 
 		requestCtx := &contexts.RequestContext{}
-		err := component.HandleAction(core.ActionContext{
+		err := component.HandleHook(core.ActionHookContext{
 			Name:           "poll",
 			HTTP:           httpContext,
 			Metadata:       metadataCtx,
@@ -498,7 +498,7 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 		}
 
 		execCtx := &contexts.ExecutionStateContext{}
-		err := component.HandleAction(core.ActionContext{
+		err := component.HandleHook(core.ActionHookContext{
 			Name:           "poll",
 			HTTP:           httpContext,
 			Metadata:       metadataCtx,
@@ -560,7 +560,7 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 		}
 
 		execCtx := &contexts.ExecutionStateContext{}
-		err := component.HandleAction(core.ActionContext{
+		err := component.HandleHook(core.ActionHookContext{
 			Name:           "poll",
 			HTTP:           httpContext,
 			Metadata:       metadataCtx,
@@ -621,7 +621,7 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 		}
 
 		execCtx := &contexts.ExecutionStateContext{}
-		err := component.HandleAction(core.ActionContext{
+		err := component.HandleHook(core.ActionHookContext{
 			Name:           "poll",
 			HTTP:           httpContext,
 			Metadata:       metadataCtx,
@@ -643,7 +643,7 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 	t.Run("times out when sandbox startup exceeded timeout", func(t *testing.T) {
 		execCtx := &contexts.ExecutionStateContext{}
 
-		err := component.HandleAction(core.ActionContext{
+		err := component.HandleHook(core.ActionHookContext{
 			Name: "poll",
 			Metadata: &contexts.MetadataContext{
 				Metadata: CreateRepositorySandboxMetadata{
@@ -971,8 +971,8 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 		assert.Equal(t, "poll", requestCtx.Action, "a transient log-fetch failure must not abort the bootstrap poll")
 	})
 
-	t.Run("unknown action returns error", func(t *testing.T) {
-		err := component.HandleAction(core.ActionContext{Name: "unknown"})
+	t.Run("unknown hook returns error", func(t *testing.T) {
+		err := component.HandleHook(core.ActionHookContext{Name: "unknown"})
 		require.ErrorContains(t, err, "unknown action")
 	})
 }

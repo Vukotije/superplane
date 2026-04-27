@@ -412,13 +412,13 @@ func (c *CreateRepositorySandbox) ProcessQueueItem(ctx core.ProcessQueueContext)
 	return ctx.DefaultProcessing()
 }
 
-func (c *CreateRepositorySandbox) Actions() []core.Action {
-	return []core.Action{
-		{Name: "poll", UserAccessible: false},
+func (c *CreateRepositorySandbox) Hooks() []core.Hook {
+	return []core.Hook{
+		{Name: "poll", Type: core.HookTypeInternal},
 	}
 }
 
-func (c *CreateRepositorySandbox) HandleAction(ctx core.ActionContext) error {
+func (c *CreateRepositorySandbox) HandleHook(ctx core.ActionHookContext) error {
 	switch ctx.Name {
 	case "poll":
 		return c.poll(ctx)
@@ -427,7 +427,7 @@ func (c *CreateRepositorySandbox) HandleAction(ctx core.ActionContext) error {
 	}
 }
 
-func (c *CreateRepositorySandbox) poll(ctx core.ActionContext) error {
+func (c *CreateRepositorySandbox) poll(ctx core.ActionHookContext) error {
 	if ctx.ExecutionState.IsFinished() {
 		return nil
 	}
@@ -461,7 +461,7 @@ func (c *CreateRepositorySandbox) poll(ctx core.ActionContext) error {
 	}
 }
 
-func (c *CreateRepositorySandbox) pollWaitingSandbox(ctx core.ActionContext, metadata *CreateRepositorySandboxMetadata) error {
+func (c *CreateRepositorySandbox) pollWaitingSandbox(ctx core.ActionHookContext, metadata *CreateRepositorySandboxMetadata) error {
 	client, err := NewClient(ctx.HTTP, ctx.Integration)
 	if err != nil {
 		return err
@@ -487,7 +487,7 @@ func (c *CreateRepositorySandbox) pollWaitingSandbox(ctx core.ActionContext, met
 	}
 }
 
-func (c *CreateRepositorySandbox) startClone(ctx core.ActionContext, client *Client, metadata *CreateRepositorySandboxMetadata) error {
+func (c *CreateRepositorySandbox) startClone(ctx core.ActionHookContext, client *Client, metadata *CreateRepositorySandboxMetadata) error {
 	cloneRequest, err := c.cloneRepositoryRequest(ctx.Secrets, metadata)
 	if err != nil {
 		return err
