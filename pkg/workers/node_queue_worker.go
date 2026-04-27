@@ -224,12 +224,12 @@ func (w *NodeQueueWorker) processNode(tx *gorm.DB, logger *log.Entry, node *mode
 	logger = logging.WithQueueItem(logger, *queueItem)
 	logger.Info("Processing queue item")
 
-	component, configFields, err := w.resolveNode(tx, node)
+	action, configFields, err := w.resolveNode(tx, node)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	ctx, err := contexts.BuildProcessQueueContext(w.registry.HTTPContext(), tx, node, queueItem, configFields, component, onNewEvents)
+	ctx, err := contexts.BuildProcessQueueContext(w.registry.HTTPContext(), tx, node, queueItem, configFields, action, onNewEvents)
 	if err != nil {
 
 		//
@@ -265,7 +265,7 @@ func (w *NodeQueueWorker) processNode(tx *gorm.DB, logger *log.Entry, node *mode
 		 * For component nodes, delegate to the component's ProcessQueueItem implementation to handle
 		 * the processing.
 		 */
-		executionID, err = w.processComponentNode(ctx, component, node)
+		executionID, err = w.processComponentNode(ctx, action, node)
 	case models.NodeTypeBlueprint:
 		/*
 		 * For blueprint nodes, use the default processing logic.
@@ -279,11 +279,11 @@ func (w *NodeQueueWorker) processNode(tx *gorm.DB, logger *log.Entry, node *mode
 	return []*uuid.UUID{executionID}, queueItem, err
 }
 
-// resolveNode resolves a canvas node to its component (nil for blueprint
+// resolveNode resolves a canvas node to its action (nil for blueprint
 // nodes) and the configuration fields that apply. One registry lookup per
 // call for component nodes; the caller threads both values through to
 // avoid repeating the lookup elsewhere in the processing path.
-func (w *NodeQueueWorker) resolveNode(tx *gorm.DB, node *models.CanvasNode) (core.Component, []configuration.Field, error) {
+func (w *NodeQueueWorker) resolveNode(tx *gorm.DB, node *models.CanvasNode) (core.Action, []configuration.Field, error) {
 	ref := node.Ref.Data()
 	switch node.Type {
 	case models.NodeTypeComponent:
@@ -291,12 +291,12 @@ func (w *NodeQueueWorker) resolveNode(tx *gorm.DB, node *models.CanvasNode) (cor
 			return nil, nil, fmt.Errorf("node %s has no component reference", node.NodeID)
 		}
 
-		comp, err := w.registry.GetComponent(ref.Component.Name)
+		action, err := w.registry.GetAction(ref.Component.Name)
 		if err != nil {
-			return nil, nil, fmt.Errorf("component %s not found: %w", ref.Component.Name, err)
+			return nil, nil, fmt.Errorf("action %s not found: %w", ref.Component.Name, err)
 		}
 
-		return comp, comp.Configuration(), nil
+		return action, action.Configuration(), nil
 	case models.NodeTypeBlueprint:
 		if ref.Blueprint == nil || ref.Blueprint.ID == "" {
 			return nil, nil, fmt.Errorf("node %s has no blueprint reference", node.NodeID)
@@ -313,12 +313,12 @@ func (w *NodeQueueWorker) resolveNode(tx *gorm.DB, node *models.CanvasNode) (cor
 	}
 }
 
-func (w *NodeQueueWorker) processComponentNode(ctx *core.ProcessQueueContext, component core.Component, node *models.CanvasNode) (*uuid.UUID, error) {
-	if component == nil {
+func (w *NodeQueueWorker) processComponentNode(ctx *core.ProcessQueueContext, action core.Action, node *models.CanvasNode) (*uuid.UUID, error) {
+	if action == nil {
 		return nil, fmt.Errorf("node %s has no component reference", node.NodeID)
 	}
 
-	return component.ProcessQueueItem(*ctx)
+	return action.ProcessQueueItem(*ctx)
 }
 
 func (w *NodeQueueWorker) handleNodeConfigurationError(tx *gorm.DB, logger *log.Entry, configErr *contexts.ConfigurationBuildError) ([]*uuid.UUID, error) {
