@@ -15,24 +15,24 @@ type ExecutionStateContext struct {
 	tx             *gorm.DB
 	maxPayloadSize int
 	onNewEvents    func([]models.CanvasEvent)
-	component      core.Component
+	action         core.Action
 
 	// channels is resolved lazily on the first Emit call so callers do not
-	// have to pre-resolve component.OutputChannels at every construction site.
+	// have to pre-resolve action.OutputChannels at every construction site.
 	channelsResolved bool
 	channels         map[string]core.OutputChannel
 }
 
 func NewExecutionStateContext(
 	tx *gorm.DB,
-	component core.Component,
+	action core.Action,
 	execution *models.CanvasNodeExecution,
 	onNewEvents func([]models.CanvasEvent),
 ) *ExecutionStateContext {
 	return &ExecutionStateContext{
 		tx:             tx,
 		execution:      execution,
-		component:      component,
+		action:         action,
 		maxPayloadSize: DefaultMaxPayloadSize,
 		onNewEvents:    onNewEvents,
 	}
@@ -113,7 +113,7 @@ func (s *ExecutionStateContext) SetKV(key, value string) error {
 // isFailureChannel reports whether emitting to the given channel should
 // finish the execution with a failed result. Derived from the channel's
 // Label via core.OutputChannel.IsFailure (a central vocabulary check),
-// so components don't declare failure semantics separately from their
+// so actions don't declare failure semantics separately from their
 // labels.
 func (s *ExecutionStateContext) isFailureChannel(channel string) bool {
 	ch, ok := s.resolveChannels()[channel]
@@ -127,11 +127,11 @@ func (s *ExecutionStateContext) resolveChannels() map[string]core.OutputChannel 
 	s.channelsResolved = true
 	s.channels = map[string]core.OutputChannel{}
 
-	if s.component == nil {
+	if s.action == nil {
 		return s.channels
 	}
 
-	for _, ch := range s.component.OutputChannels(s.execution.Configuration.Data()) {
+	for _, ch := range s.action.OutputChannels(s.execution.Configuration.Data()) {
 		s.channels[ch.Name] = ch
 	}
 	return s.channels

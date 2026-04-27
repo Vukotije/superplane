@@ -13,16 +13,16 @@ import (
 	"gorm.io/datatypes"
 )
 
-// stubComponent is a minimal core.Component for Emit-routing tests. Only
+// stubAction is a minimal core.Action for Emit-routing tests. Only
 // OutputChannels is implemented; all other methods panic if ever called
 // via the embedded nil interface. This avoids re-stubbing the full
-// Component interface for each test.
-type stubComponent struct {
-	core.Component // embedded nil interface — unused methods panic
-	channels       []core.OutputChannel
+// Action interface for each test.
+type stubAction struct {
+	core.Action // embedded nil interface — unused methods panic
+	channels    []core.OutputChannel
 }
 
-func (s *stubComponent) OutputChannels(any) []core.OutputChannel { return s.channels }
+func (s *stubAction) OutputChannels(any) []core.OutputChannel { return s.channels }
 
 func Test__ExecutionStateContext__Emit(t *testing.T) {
 	r := support.Setup(t)
@@ -53,7 +53,7 @@ func Test__ExecutionStateContext__Emit(t *testing.T) {
 		},
 	)
 
-	failureComponent := &stubComponent{channels: []core.OutputChannel{
+	failureAction := &stubAction{channels: []core.OutputChannel{
 		{Name: "success", Label: "Success"},
 		{Name: "failure", Label: "Failure"},
 	}}
@@ -96,7 +96,7 @@ func Test__ExecutionStateContext__Emit(t *testing.T) {
 		rootEvent := support.EmitCanvasEventForNodeWithData(t, canvas.ID, triggerNodeID, "default", nil, rootData)
 		execution := support.CreateCanvasNodeExecution(t, canvas.ID, componentNodeID, rootEvent.ID, rootEvent.ID, nil)
 
-		ctx := NewExecutionStateContext(database.Conn(), failureComponent, execution, nil)
+		ctx := NewExecutionStateContext(database.Conn(), failureAction, execution, nil)
 		err := ctx.Emit("failure", "test.payload", []any{map[string]any{"err": "boom"}})
 		require.NoError(t, err)
 
@@ -126,7 +126,7 @@ func Test__ExecutionStateContext__Emit(t *testing.T) {
 		rootEvent := support.EmitCanvasEventForNodeWithData(t, canvas.ID, triggerNodeID, "default", nil, rootData)
 		execution := support.CreateCanvasNodeExecution(t, canvas.ID, componentNodeID, rootEvent.ID, rootEvent.ID, nil)
 
-		ctx := NewExecutionStateContext(database.Conn(), failureComponent, execution, nil)
+		ctx := NewExecutionStateContext(database.Conn(), failureAction, execution, nil)
 		err := ctx.Emit("success", "test.payload", []any{map[string]any{"ok": true}})
 		require.NoError(t, err)
 
@@ -148,7 +148,7 @@ func Test__ExecutionStateContext__Emit(t *testing.T) {
 		parent := support.CreateCanvasNodeExecution(t, canvas.ID, componentNodeID, rootEvent.ID, rootEvent.ID, nil)
 		child := support.CreateCanvasNodeExecution(t, canvas.ID, componentNodeID, rootEvent.ID, rootEvent.ID, &parent.ID)
 
-		ctx := NewExecutionStateContext(database.Conn(), failureComponent, child, nil)
+		ctx := NewExecutionStateContext(database.Conn(), failureAction, child, nil)
 		require.NoError(t, ctx.Emit("failure", "test.payload", []any{map[string]any{"err": "boom"}}))
 
 		var reloadedChild models.CanvasNodeExecution
