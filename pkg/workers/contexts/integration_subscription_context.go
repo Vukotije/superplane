@@ -133,7 +133,11 @@ func (c *IntegrationSubscriptionContext) findExecutionByKV(key string, value str
 
 	var action core.Action
 	if ref := c.node.Ref.Data(); ref.Component != nil {
-		action, _ = c.registry.GetAction(ref.Component.Name)
+		var err error
+		action, err = c.registry.GetAction(ref.Component.Name)
+		if err != nil {
+			return nil, fmt.Errorf("action %s not found: %w", ref.Component.Name, err)
+		}
 	}
 
 	return &core.ExecutionContext{
