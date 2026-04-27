@@ -641,7 +641,7 @@ func (c *CreateRepositorySandbox) prepareInlineBootstrapScript(client *Client, m
 	return nil
 }
 
-func (c *CreateRepositorySandbox) pollBootstrapping(ctx core.ActionContext, metadata *CreateRepositorySandboxMetadata) error {
+func (c *CreateRepositorySandbox) pollBootstrapping(ctx core.ActionHookContext, metadata *CreateRepositorySandboxMetadata) error {
 	client, err := NewClient(ctx.HTTP, ctx.Integration)
 	if err != nil {
 		// Treat as transient — the previous getCommandResult-based
@@ -722,7 +722,7 @@ func (c *CreateRepositorySandbox) pollBootstrapping(ctx core.ActionContext, meta
 // markBootstrapTimedOut records the best-effort terminal state for the
 // bootstrap phase when the deadline fires, so the UI has a definite
 // FinishedAt timestamp and the last captured log.
-func (c *CreateRepositorySandbox) markBootstrapTimedOut(ctx core.ActionContext, metadata *CreateRepositorySandboxMetadata) {
+func (c *CreateRepositorySandbox) markBootstrapTimedOut(ctx core.ActionHookContext, metadata *CreateRepositorySandboxMetadata) {
 	if metadata.Bootstrap == nil || metadata.Stage != repositorySandboxStageBootstrapping {
 		return
 	}
@@ -750,7 +750,7 @@ func resolveTimeoutSeconds(bootstrap *CreateRepositorySandboxBootstrapSpec) int 
 // Returns the log content and whether the fetch succeeded; on failure
 // the error is logged and the caller is expected to keep any previously
 // persisted log content intact rather than overwriting it with empty.
-func fetchBootstrapLogs(ctx core.ActionContext, client *Client, metadata *CreateRepositorySandboxMetadata) (string, bool) {
+func fetchBootstrapLogs(ctx core.ActionHookContext, client *Client, metadata *CreateRepositorySandboxMetadata) (string, bool) {
 	logs, err := client.GetSessionCommandLogs(metadata.SandboxID, metadata.SessionID, metadata.Bootstrap.CmdID)
 	if err != nil {
 		ctx.Logger.Errorf("failed to get bootstrap command logs for %s: %v", metadata.Bootstrap.CmdID, err)
@@ -777,7 +777,7 @@ func tailBytes(s string, max int) string {
 	return marker + tail
 }
 
-func (c *CreateRepositorySandbox) finish(ctx core.ActionContext, metadata *CreateRepositorySandboxMetadata) error {
+func (c *CreateRepositorySandbox) finish(ctx core.ActionHookContext, metadata *CreateRepositorySandboxMetadata) error {
 	metadata.Stage = repositorySandboxStageDone
 	err := ctx.Metadata.Set(*metadata)
 	if err != nil {

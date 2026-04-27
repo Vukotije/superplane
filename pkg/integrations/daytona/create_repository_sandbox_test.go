@@ -451,7 +451,7 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 			},
 		}
 
-		err := component.HandleAction(core.ActionContext{
+		err := component.HandleHook(core.ActionHookContext{
 			Name:           "poll",
 			HTTP:           httpContext,
 			Metadata:       metadataCtx,
@@ -683,7 +683,7 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 			},
 		}
 
-		err := component.HandleAction(core.ActionContext{
+		err := component.HandleHook(core.ActionHookContext{
 			Name:           "poll",
 			Metadata:       metadataCtx,
 			ExecutionState: execCtx,
@@ -737,7 +737,7 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 
 		requestCtx := &contexts.RequestContext{}
 		execCtx := &contexts.ExecutionStateContext{}
-		err := component.HandleAction(core.ActionContext{
+		err := component.HandleHook(core.ActionHookContext{
 			Name:           "poll",
 			HTTP:           httpContext,
 			Metadata:       metadataCtx,
@@ -786,7 +786,7 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 			},
 		}
 
-		err := component.HandleAction(core.ActionContext{
+		err := component.HandleHook(core.ActionHookContext{
 			Name:           "poll",
 			HTTP:           httpContext,
 			Metadata:       metadataCtx,
@@ -841,7 +841,7 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 		}
 
 		execCtx := &contexts.ExecutionStateContext{}
-		err := component.HandleAction(core.ActionContext{
+		err := component.HandleHook(core.ActionHookContext{
 			Name:           "poll",
 			HTTP:           httpContext,
 			Metadata:       metadataCtx,
@@ -902,7 +902,7 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 		}
 
 		execCtx := &contexts.ExecutionStateContext{}
-		err := component.HandleAction(core.ActionContext{
+		err := component.HandleHook(core.ActionHookContext{
 			Name:           "poll",
 			HTTP:           httpContext,
 			Metadata:       metadataCtx,
@@ -954,7 +954,7 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 
 		requestCtx := &contexts.RequestContext{}
 		execCtx := &contexts.ExecutionStateContext{}
-		err := component.HandleAction(core.ActionContext{
+		err := component.HandleHook(core.ActionHookContext{
 			Name:           "poll",
 			HTTP:           httpContext,
 			Metadata:       metadataCtx,
