@@ -539,8 +539,9 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 					FinishedAt: time.Now().Format(time.RFC3339),
 				},
 				Bootstrap: &BootstrapMetadata{
-					CmdID: "cmd-bootstrap",
-					From:  SandboxBootstrapFromInline,
+					CmdID:     "cmd-bootstrap",
+					From:      SandboxBootstrapFromInline,
+					StartedAt: time.Now().Format(time.RFC3339),
 				},
 			},
 		}
@@ -600,8 +601,9 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 				Timeout:          int(5 * time.Minute.Seconds()),
 				SessionID:        "session-1",
 				Bootstrap: &BootstrapMetadata{
-					CmdID: "cmd-bootstrap",
-					From:  SandboxBootstrapFromInline,
+					CmdID:     "cmd-bootstrap",
+					From:      SandboxBootstrapFromInline,
+					StartedAt: time.Now().Format(time.RFC3339),
 				},
 			},
 		}
@@ -640,11 +642,49 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 		assert.Contains(t, execCtx.FailureMessage, "bootstrap script failed with exit code 2: npm ERR!")
 	})
 
-	t.Run("times out when sandbox startup exceeded timeout", func(t *testing.T) {
+	t.Run("times out when sandbox startup exceeded the hardcoded startup timeout", func(t *testing.T) {
+		// Sandbox creation + clone is bounded by a fixed startup window;
+		// the user-configured bootstrap timeout does not apply yet.
 		execCtx := &contexts.ExecutionStateContext{}
 
 		err := component.HandleHook(core.ActionHookContext{
 			Name: "poll",
+			Metadata: &contexts.MetadataContext{
+				Metadata: CreateRepositorySandboxMetadata{
+					Stage:            repositorySandboxStagePreparingSandbox,
+					SandboxID:        "sandbox-123",
+					SandboxStartedAt: time.Now().Add(-(CreateRepositorySandboxStartupTimeout + time.Minute)).Format(time.RFC3339),
+					Timeout:          int(time.Hour.Seconds()), // user-configured bootstrap timeout — must be ignored here
+				},
+			},
+			ExecutionState: execCtx,
+			Requests:       &contexts.RequestContext{},
+			Logger:         newTestLogger(),
+			Integration: &contexts.IntegrationContext{
+				Configuration: map[string]any{"apiKey": "test-api-key"},
+			},
+		})
+
+		require.NoError(t, err)
+		assert.True(t, execCtx.Finished)
+		assert.False(t, execCtx.Passed)
+		assert.Equal(t, "error", execCtx.FailureReason)
+		assert.Contains(t, execCtx.FailureMessage, "sandbox startup failed on stage preparingSandbox")
+	})
+
+	t.Run("does not apply bootstrap timeout during sandbox startup", func(t *testing.T) {
+		// A short bootstrap timeout must not abort an in-progress sandbox
+		// startup, since bootstrap has not begun yet.
+		execCtx := &contexts.ExecutionStateContext{}
+		httpContext := &contexts.HTTPContext{
+			Responses: []*http.Response{
+				{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"id":"sandbox-123","state":"creating"}`))},
+			},
+		}
+
+		err := component.HandleHook(core.ActionHookContext{
+			Name: "poll",
+			HTTP: httpContext,
 			Metadata: &contexts.MetadataContext{
 				Metadata: CreateRepositorySandboxMetadata{
 					Stage:            repositorySandboxStagePreparingSandbox,
@@ -662,23 +702,22 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 		})
 
 		require.NoError(t, err)
-		assert.True(t, execCtx.Finished)
-		assert.False(t, execCtx.Passed)
-		assert.Equal(t, "error", execCtx.FailureReason)
-		assert.Contains(t, execCtx.FailureMessage, "sandbox creation failed on stage preparingSandbox after 1m0s")
+		assert.False(t, execCtx.Finished, "user bootstrap timeout must not apply during sandbox startup phase")
 	})
 
 	t.Run("times out during bootstrap stage and marks execution as failed", func(t *testing.T) {
 		execCtx := &contexts.ExecutionStateContext{}
 		metadataCtx := &contexts.MetadataContext{
 			Metadata: CreateRepositorySandboxMetadata{
-				Stage:            repositorySandboxStageBootstrapping,
-				SandboxID:        "sandbox-123",
-				SandboxStartedAt: time.Now().Add(-2 * time.Minute).Format(time.RFC3339),
+				Stage: repositorySandboxStageBootstrapping,
+				// SandboxStartedAt long ago; must not influence the bootstrap deadline.
+				SandboxStartedAt: time.Now().Add(-30 * time.Minute).Format(time.RFC3339),
 				Timeout:          int(time.Minute.Seconds()),
 				SessionID:        "session-1",
+				SandboxID:        "sandbox-123",
 				Bootstrap: &BootstrapMetadata{
-					CmdID: "cmd-bootstrap",
+					CmdID:     "cmd-bootstrap",
+					StartedAt: time.Now().Add(-2 * time.Minute).Format(time.RFC3339),
 				},
 			},
 		}
@@ -698,11 +737,7 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 		assert.True(t, execCtx.Finished)
 		assert.False(t, execCtx.Passed)
 		assert.Equal(t, "error", execCtx.FailureReason)
-		assert.Contains(
-			t,
-			execCtx.FailureMessage,
-			"sandbox creation failed on stage "+repositorySandboxStageBootstrapping+" after 1m0s",
-		)
+		assert.Contains(t, execCtx.FailureMessage, "bootstrap failed after 1m0s")
 
 		updated := metadataCtx.Metadata.(CreateRepositorySandboxMetadata)
 		require.NotNil(t, updated.Bootstrap)
@@ -718,8 +753,9 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 				Timeout:          int(5 * time.Minute.Seconds()),
 				SessionID:        "session-1",
 				Bootstrap: &BootstrapMetadata{
-					CmdID: "cmd-bootstrap",
-					From:  SandboxBootstrapFromInline,
+					CmdID:     "cmd-bootstrap",
+					From:      SandboxBootstrapFromInline,
+					StartedAt: time.Now().Format(time.RFC3339),
 				},
 			},
 		}
@@ -771,8 +807,9 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 				Timeout:          int(5 * time.Minute.Seconds()),
 				SessionID:        "session-1",
 				Bootstrap: &BootstrapMetadata{
-					CmdID: "cmd-bootstrap",
-					From:  SandboxBootstrapFromInline,
+					CmdID:     "cmd-bootstrap",
+					From:      SandboxBootstrapFromInline,
+					StartedAt: time.Now().Format(time.RFC3339),
 				},
 			},
 		}
@@ -820,8 +857,9 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 					FinishedAt: time.Now().Format(time.RFC3339),
 				},
 				Bootstrap: &BootstrapMetadata{
-					CmdID: "cmd-bootstrap",
-					From:  SandboxBootstrapFromInline,
+					CmdID:     "cmd-bootstrap",
+					From:      SandboxBootstrapFromInline,
+					StartedAt: time.Now().Format(time.RFC3339),
 				},
 			},
 		}
@@ -879,10 +917,11 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 					FinishedAt: time.Now().Format(time.RFC3339),
 				},
 				Bootstrap: &BootstrapMetadata{
-					CmdID:  "cmd-bootstrap",
-					From:   SandboxBootstrapFromInline,
-					Log:    priorLog,
-					Result: priorLog,
+					CmdID:     "cmd-bootstrap",
+					From:      SandboxBootstrapFromInline,
+					StartedAt: time.Now().Format(time.RFC3339),
+					Log:       priorLog,
+					Result:    priorLog,
 				},
 			},
 		}
@@ -934,8 +973,9 @@ func Test__CreateRepositorySandbox__HandleAction(t *testing.T) {
 				Timeout:          int(5 * time.Minute.Seconds()),
 				SessionID:        "session-1",
 				Bootstrap: &BootstrapMetadata{
-					CmdID: "cmd-bootstrap",
-					From:  SandboxBootstrapFromInline,
+					CmdID:     "cmd-bootstrap",
+					From:      SandboxBootstrapFromInline,
+					StartedAt: time.Now().Format(time.RFC3339),
 				},
 			},
 		}

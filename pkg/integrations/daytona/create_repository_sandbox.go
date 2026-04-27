@@ -18,9 +18,17 @@ const (
 	CreateRepositorySandboxPayloadType           = "daytona.repository.sandbox"
 	CreateRepositorySandboxPollInterval          = 5 * time.Second
 	CreateRepositorySandboxBootstrapPollInterval = 2 * time.Second
-	CreateRepositorySandboxDefaultTimeout        = 5 * time.Minute
-	CreateRepositorySandboxMaxTimeout            = time.Hour
-	CreateRepositorySandboxBootstrapLogMaxBytes  = 64 * 1024
+	// CreateRepositorySandboxStartupTimeout caps the sandbox creation +
+	// repository clone phase. Not user-configurable; if Daytona has not
+	// produced a started sandbox and a finished clone within this window,
+	// the execution fails with a startup error.
+	CreateRepositorySandboxStartupTimeout = 5 * time.Minute
+	// CreateRepositorySandboxDefaultTimeout is the default user-configurable
+	// bootstrap timeout: it caps how long the bootstrap script may run,
+	// measured from when the bootstrap command is dispatched.
+	CreateRepositorySandboxDefaultTimeout       = 5 * time.Minute
+	CreateRepositorySandboxMaxTimeout           = time.Hour
+	CreateRepositorySandboxBootstrapLogMaxBytes = 64 * 1024
 
 	SandboxBootstrapFromInline = "inline"
 	SandboxBootstrapFromFile   = "file"
@@ -245,7 +253,7 @@ func (c *CreateRepositorySandbox) Configuration() []configuration.Field {
 							Label:       "Timeout",
 							Type:        configuration.FieldTypeNumber,
 							Required:    false,
-							Description: "Time in minutes before the bootstrap fails",
+							Description: "Time in minutes the bootstrap script may run before it is failed. Measured from when the script starts; sandbox creation and clone have a separate fixed timeout.",
 							Default:     int(CreateRepositorySandboxDefaultTimeout.Minutes()),
 						},
 					},
@@ -437,23 +445,36 @@ func (c *CreateRepositorySandbox) poll(ctx core.ActionHookContext) error {
 		return fmt.Errorf("failed to decode metadata: %v", err)
 	}
 
-	startedAt, err := time.Parse(time.RFC3339, metadata.SandboxStartedAt)
-	if err != nil {
-		return fmt.Errorf("failed to parse sandbox started at: %v", err)
-	}
-
-	timeout := time.Duration(metadata.Timeout) * time.Second
-	if time.Since(startedAt) > timeout {
-		c.markBootstrapTimedOut(ctx, &metadata)
-		ctx.Logger.Errorf("sandbox creation failed on stage %s after %v", metadata.Stage, timeout)
-		return ctx.ExecutionState.Fail("error", fmt.Sprintf("sandbox creation failed on stage %s after %v", metadata.Stage, timeout))
-	}
-
 	switch metadata.Stage {
 	case repositorySandboxStagePreparingSandbox:
+		// Sandbox creation + clone is bounded by a fixed startup timeout,
+		// anchored at the time the sandbox was created. The user-configured
+		// bootstrap timeout does not apply here because bootstrap has not
+		// started yet.
+		startedAt, err := time.Parse(time.RFC3339, metadata.SandboxStartedAt)
+		if err != nil {
+			return fmt.Errorf("failed to parse sandbox started at: %v", err)
+		}
+		if time.Since(startedAt) > CreateRepositorySandboxStartupTimeout {
+			ctx.Logger.Errorf("sandbox startup failed on stage %s after %v", metadata.Stage, CreateRepositorySandboxStartupTimeout)
+			return ctx.ExecutionState.Fail("error", fmt.Sprintf("sandbox startup failed on stage %s after %v", metadata.Stage, CreateRepositorySandboxStartupTimeout))
+		}
 		return c.pollWaitingSandbox(ctx, &metadata)
 
 	case repositorySandboxStageBootstrapping:
+		// Bootstrap timeout is user-configurable and anchored at the time the
+		// bootstrap command was dispatched, so the budget begins when the
+		// script actually starts running — not at sandbox creation.
+		bootstrapStartedAt, err := time.Parse(time.RFC3339, metadata.Bootstrap.StartedAt)
+		if err != nil {
+			return fmt.Errorf("failed to parse bootstrap started at: %v", err)
+		}
+		timeout := time.Duration(metadata.Timeout) * time.Second
+		if time.Since(bootstrapStartedAt) > timeout {
+			c.markBootstrapTimedOut(ctx, &metadata)
+			ctx.Logger.Errorf("bootstrap failed after %v", timeout)
+			return ctx.ExecutionState.Fail("error", fmt.Sprintf("bootstrap failed after %v", timeout))
+		}
 		return c.pollBootstrapping(ctx, &metadata)
 
 	default:
