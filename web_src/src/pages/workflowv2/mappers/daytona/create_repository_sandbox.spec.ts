@@ -150,6 +150,26 @@ describe("createRepositorySandboxMapper.getExecutionDetails", () => {
     expect(details.Elapsed).toContain("45s");
   });
 
+  it("renders sub-second bootstrap elapsed as 0s, not an empty string", () => {
+    // formatDuration returns "" for ms < 1000, which would show as
+    // " / 5m" in the UI right after the bootstrap command starts.
+    const node = buildNode();
+    const now = new Date().toISOString();
+    const ctx: ExecutionDetailsContext = {
+      nodes: [node],
+      node,
+      execution: buildExecution({
+        stage: "bootstrapping",
+        sandboxStartedAt: now,
+        timeout: 300,
+        bootstrap: { startedAt: now },
+      }),
+    };
+
+    const details = createRepositorySandboxMapper.getExecutionDetails(ctx);
+    expect(details.Elapsed).toMatch(/^0s\s*\/\s*\S+/);
+  });
+
   it("omits elapsed when sandboxStartedAt is missing", () => {
     const node = buildNode();
     const ctx: ExecutionDetailsContext = {

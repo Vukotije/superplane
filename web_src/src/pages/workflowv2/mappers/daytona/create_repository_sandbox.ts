@@ -98,7 +98,7 @@ function buildElapsedLabel(
       const endAtMs = resolveBootstrapEndTimestamp(context, metadata) ?? Date.now();
       const elapsedMs = Math.max(0, endAtMs - startedAtMs);
       const timeoutMs = metadata.timeout * 1000;
-      return `${formatDuration(elapsedMs)} / ${formatDuration(timeoutMs)}`;
+      return `${formatElapsed(elapsedMs)} / ${formatElapsed(timeoutMs)}`;
     }
   }
 
@@ -110,7 +110,17 @@ function buildElapsedLabel(
     return undefined;
   }
   const endAtMs = resolveExecutionEndTimestamp(context) ?? Date.now();
-  return formatDuration(Math.max(0, endAtMs - startedAtMs));
+  return formatElapsed(Math.max(0, endAtMs - startedAtMs));
+}
+
+// formatElapsed renders a duration with a sane "0s" floor.
+// formatDuration returns "" for sub-second values, which breaks the
+// "<elapsed> / <timeout>" indicator visually right after bootstrap starts.
+function formatElapsed(ms: number): string {
+  if (ms < 1000) {
+    return "0s";
+  }
+  return formatDuration(ms);
 }
 
 function resolveBootstrapEndTimestamp(
